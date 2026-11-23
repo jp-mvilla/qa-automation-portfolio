@@ -1,83 +1,76 @@
 import { test, expect } from '@playwright/test';
+import { LoginPage } from '../../pages/LoginPage';
+import { ProdutosPage } from '../../pages/ProdutosPage';
+import { CheckoutPage } from '../../pages/CheckoutPage';
 
 /**
  * Fluxo de compra — SauceDemo
  *
- * Cobre o caminho principal (adicionar ao carrinho → checkout → pedido finalizado),
- * a conferência dos valores e as validações do formulário de entrega.
+ * Cobre o caminho feliz (carrinho → checkout → pedido finalizado),
+ * a conferência dos valores calculados e os caminhos de erro do formulário de entrega.
  */
 
-// Antes de cada teste: faz login, para todos começarem já na lista de produtos.
+const MOCHILA = 'sauce-labs-backpack'; // $29.99
+const LANTERNA = 'sauce-labs-bike-light'; // $9.99
+
+let produtos: ProdutosPage;
+let checkout: CheckoutPage;
+
+// Antes de cada teste: login, para todos começarem na lista de produtos.
 test.beforeEach(async ({ page }) => {
-  await page.goto('/');
-  await page.getByTestId('username').fill('standard_user');
-  await page.getByTestId('password').fill('secret_sauce');
-  await page.getByTestId('login-button').click();
-  await expect(page).toHaveURL(/inventory\.html/);
+  await new LoginPage(page).entrarComSucesso();
+  produtos = new ProdutosPage(page);
+  checkout = new CheckoutPage(page);
 });
 
-test('CT06 - adicionar produtos atualiza o contador do carrinho', async ({ page }) => {
-  await page.getByTestId('add-to-cart-sauce-labs-backpack').click();
-  await expect(page.getByTestId('shopping-cart-badge')).toHaveText('1');
+test('CT06 - adicionar produtos atualiza o contador do carrinho', async () => {
+  await produtos.adicionar(MOCHILA);
+  await expect(produtos.contadorCarrinho).toHaveText('1');
 
-  await page.getByTestId('add-to-cart-sauce-labs-bike-light').click();
-  await expect(page.getByTestId('shopping-cart-badge')).toHaveText('2');
+  await produtos.adicionar(LANTERNA);
+  await expect(produtos.contadorCarrinho).toHaveText('2');
 });
 
-test('CT07 - remover produto do carrinho atualiza o contador', async ({ page }) => {
-  await page.getByTestId('add-to-cart-sauce-labs-backpack').click();
-  await page.getByTestId('add-to-cart-sauce-labs-bike-light').click();
-  await page.getByTestId('remove-sauce-labs-backpack').click();
+test('CT07 - remover produto do carrinho atualiza o contador', async () => {
+  await produtos.adicionar(MOCHILA);
+  await produtos.adicionar(LANTERNA);
+  await produtos.remover(MOCHILA);
 
-  await expect(page.getByTestId('shopping-cart-badge')).toHaveText('1');
+  await expect(produtos.contadorCarrinho).toHaveText('1');
 });
 
-test('CT08 - compra completa com conferência de subtotal, imposto e total', async ({ page }) => {
-  // Mochila ($29.99) + Lanterna ($9.99) = $39.98
-  await page.getByTestId('add-to-cart-sauce-labs-backpack').click();
-  await page.getByTestId('add-to-cart-sauce-labs-bike-light').click();
+test('CT08 - compra completa com conferência de subtotal, imposto e total', async () => {
+  await produtos.adicionar(MOCHILA);
+  await produtos.adicionar(LANTERNA);
+  await produtos.abrirCarrinho();
+  await expect(checkout.itensCarrinho).toHaveCount(2);
 
-  // Carrinho: confere se os 2 itens estão lá
-  await page.getByTestId('shopping-cart-link').click();
-  await expect(page.getByTestId('inventory-item')).toHaveCount(2);
-  await page.getByTestId('checkout').click();
+  await checkout.iniciar();
+  await checkout.preencherEntrega('João', 'Villa', '15105-000');
 
-  // Dados de entrega
-  await page.getByTestId('firstName').fill('João');
-  await page.getByTestId('lastName').fill('Villa');
-  await page.getByTestId('postalCode').fill('15105-000');
-  await page.getByTestId('continue').click();
+  // $29.99 + $9.99 = $39.98; imposto de 8% = $3.20; total = $43.18
+  await expect(checkout.subtotal).toHaveText('Item total: $39.98');
+  await expect(checkout.imposto).toHaveText('Tax: $3.20');
+  await expect(checkout.total).toHaveText('Total: $43.18');
 
-  // Resumo: confere os valores calculados pelo sistema
-  await expect(page.getByTestId('subtotal-label')).toHaveText('Item total: $39.98');
-  await expect(page.getByTestId('tax-label')).toHaveText('Tax: $3.20');
-  await expect(page.getByTestId('total-label')).toHaveText('Total: $43.18');
-
-  // Finaliza o pedido
-  await page.getByTestId('finish').click();
-  await expect(page.getByTestId('complete-header')).toHaveText('Thank you for your order!');
+  await checkout.finalizar();
+  await expect(checkout.mensagemConfirmacao).toHaveText('Thank you for your order!');
 });
 
-test('CT09 - checkout sem nome exibe erro de campo obrigatório', async ({ page }) => {
-  await page.getByTestId('add-to-cart-sauce-labs-backpack').click();
-  await page.getByTestId('shopping-cart-link').click();
-  await page.getByTestId('checkout').click();
+test('CT09 - checkout sem nome exibe erro de campo obrigatório', async () => {
+  await produtos.adicionar(MOCHILA);
+  await produtos.abrirCarrinho();
+  await checkout.iniciar();
+  await checkout.preencherEntrega('', 'Villa', '15105-000');
 
-  await page.getByTestId('lastName').fill('Villa');
-  await page.getByTestId('postalCode').fill('15105-000');
-  await page.getByTestId('continue').click();
-
-  await expect(page.getByTestId('error')).toHaveText('Error: First Name is required');
+  await expect(checkout.mensagemErro).toHaveText('Error: First Name is required');
 });
 
-test('CT10 - checkout sem CEP exibe erro de campo obrigatório', async ({ page }) => {
-  await page.getByTestId('add-to-cart-sauce-labs-backpack').click();
-  await page.getByTestId('shopping-cart-link').click();
-  await page.getByTestId('checkout').click();
+test('CT10 - checkout sem CEP exibe erro de campo obrigatório', async () => {
+  await produtos.adicionar(MOCHILA);
+  await produtos.abrirCarrinho();
+  await checkout.iniciar();
+  await checkout.preencherEntrega('João', 'Villa', '');
 
-  await page.getByTestId('firstName').fill('João');
-  await page.getByTestId('lastName').fill('Villa');
-  await page.getByTestId('continue').click();
-
-  await expect(page.getByTestId('error')).toHaveText('Error: Postal Code is required');
+  await expect(checkout.mensagemErro).toHaveText('Error: Postal Code is required');
 });
