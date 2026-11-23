@@ -1,0 +1,228 @@
+{
+  "info": {
+    "name": "Restful-Booker - Testes de API",
+    "description": "Mesmos cenários dos testes de API em Playwright (tests/api), em versão Postman. Rodar em ordem: cada requisição usa dados salvos pela anterior (token e id da reserva).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://restful-booker.herokuapp.com" },
+    { "key": "token", "value": "" },
+    { "key": "bookingId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "01 - Healthcheck",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/ping"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 201 (API no ar)', () => {",
+              "  pm.response.to.have.status(201);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Autenticar (gera token)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"password123\"\n}"
+        },
+        "url": "{{baseUrl}}/auth"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Retorna um token', () => {",
+              "  const corpo = pm.response.json();",
+              "  pm.expect(corpo.token).to.be.a('string').and.not.empty;",
+              "  // Guarda o token para as próximas requisições",
+              "  pm.collectionVariables.set('token', corpo.token);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Criar reserva",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"firstname\": \"Joao\",\n  \"lastname\": \"Villa\",\n  \"totalprice\": 350,\n  \"depositpaid\": true,\n  \"bookingdates\": { \"checkin\": \"2026-12-10\", \"checkout\": \"2026-12-15\" },\n  \"additionalneeds\": \"Cafe da manha\"\n}"
+        },
+        "url": "{{baseUrl}}/booking"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Retorna o id e os dados enviados', () => {",
+              "  const corpo = pm.response.json();",
+              "  pm.expect(corpo.bookingid).to.be.a('number');",
+              "  pm.expect(corpo.booking.firstname).to.eql('Joao');",
+              "  pm.expect(corpo.booking.totalprice).to.eql(350);",
+              "  // Guarda o id para consultar, alterar e excluir depois",
+              "  pm.collectionVariables.set('bookingId', corpo.bookingid);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Consultar reserva",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "url": "{{baseUrl}}/booking/{{bookingId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Dados iguais aos cadastrados', () => {",
+              "  const corpo = pm.response.json();",
+              "  pm.expect(corpo.firstname).to.eql('Joao');",
+              "  pm.expect(corpo.bookingdates.checkin).to.eql('2026-12-10');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Atualizar reserva (com token)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "application/json" },
+          { "key": "Cookie", "value": "token={{token}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"firstname\": \"Joao\",\n  \"lastname\": \"Villa\",\n  \"totalprice\": 500,\n  \"depositpaid\": true,\n  \"bookingdates\": { \"checkin\": \"2026-12-10\", \"checkout\": \"2026-12-15\" },\n  \"additionalneeds\": \"Estacionamento\"\n}"
+        },
+        "url": "{{baseUrl}}/booking/{{bookingId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 200', () => {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Preço e observação foram alterados', () => {",
+              "  const corpo = pm.response.json();",
+              "  pm.expect(corpo.totalprice).to.eql(500);",
+              "  pm.expect(corpo.additionalneeds).to.eql('Estacionamento');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Atualizar reserva sem token (negativo)",
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Accept", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"firstname\": \"Invasor\",\n  \"lastname\": \"Sem Token\",\n  \"totalprice\": 1,\n  \"depositpaid\": false,\n  \"bookingdates\": { \"checkin\": \"2026-12-10\", \"checkout\": \"2026-12-15\" }\n}"
+        },
+        "url": "{{baseUrl}}/booking/{{bookingId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 403 (bloqueado sem token)', () => {",
+              "  pm.response.to.have.status(403);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Excluir reserva",
+      "request": {
+        "method": "DELETE",
+        "header": [{ "key": "Cookie", "value": "token={{token}}" }],
+        "url": "{{baseUrl}}/booking/{{bookingId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "// A API responde 201 ao excluir: ver BUG-02 em docs/bugs.md",
+              "pm.test('Status 201 (exclusão aceita)', () => {",
+              "  pm.response.to.have.status(201);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 - Consultar reserva excluída (negativo)",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Accept", "value": "application/json" }],
+        "url": "{{baseUrl}}/booking/{{bookingId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Status 404 (reserva não existe mais)', () => {",
+              "  pm.response.to.have.status(404);",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
