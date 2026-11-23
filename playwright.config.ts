@@ -24,5 +24,14 @@ export default defineConfig({
       testDir: './tests/e2e',
       use: { ...devices['Desktop Chrome'], baseURL: 'https://www.saucedemo.com' },
     },
+    {
+      // Testes de API: não abrem navegador, fazem requisições HTTP direto na API.
+      name: 'api',
+      testDir: './tests/api',
+      use: {
+        baseURL: 'https://restful-booker.herokuapp.com',
+        extraHTTPHeaders: { Accept: 'application/json' },
+      },
+    },
   ],
 });
